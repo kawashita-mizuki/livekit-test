@@ -2,72 +2,67 @@
 <html lang="ja">
 <head>
     <title>LiveKit Demo</title>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script> -->
+    <link href="/static/front/css/styles.css" rel="stylesheet">
 </head>
 <body>
     <button id="liveStart">ライブを始める</button>
-    <div id="video-container"></div>
+    <div id="my-video-container"></div>
+    <div id="remote-video-container"></div>
+    <video id="video" width="640" height="480" autoplay playsinline></video>
 </body>
-<!-- <script src="/static/front/js/base.js"></script> -->
+
 <script type="module">
-  // import { connect, RoomEvent } from 'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.esm.js';
-  import { connect, Room, RoomEvent, createLocalVideoTrack, createLocalAudioTrack } from 'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.esm.js';
-  document.getElementById('liveStart').addEventListener('click', async () => {
-    try {
-        const response = await fetch('/live/start');
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        const token = data.token;
+    // navigator.mediaDevices.getUserMedia({ video: true })
+    // .then(stream => {
+    //     document.getElementById('video').srcObject = stream;
+    // })
+    // .catch(error => {
+    //     console.error('Error accessing media devices.', error);
+    // });
 
-        const wsURL = "wss://livekit-test.colabmix.jp:7880";
-
-        // LiveKit に接続
-        const room = await connect(wsURL, token);
-
-        // ブラウザ互換性のチェック
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            throw new Error('getUserMedia is not supported in this browser.');
-        }
-
-        // カメラとマイクのトラックを作成
-        const videoTrack = await createLocalVideoTrack().catch(error => {
-            console.error('Error creating video track:', error);
-        });
-        const audioTrack = await createLocalAudioTrack().catch(error => {
-            console.error('Error creating audio track:', error);
-        });
-
-            // トラックが作成された場合のみパブリッシュ
-            if (videoTrack) {
-                await room.localParticipant.publishTrack(videoTrack);
+    import { connect, Room, RoomEvent, createLocalVideoTrack, createLocalAudioTrack } from 'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.esm.js';
+    document.getElementById('liveStart').addEventListener('click', async () => {
+        try {
+            const response = await fetch('/live/start');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
-            if (audioTrack) {
-                await room.localParticipant.publishTrack(audioTrack);
-            }
+            const data = await response.json();
+            const token = data.token;
 
-            room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-                console.log('TrackSubscribed', track, publication, participant);
-                if (track.kind === 'video') {
-                    const videoContainer = document.getElementById('video-container');
-                    const videoElement = track.attach();
-                    videoContainer.appendChild(videoElement);
-                    console.log('Video element attached', videoElement);
-                }
-            });
+            const wsURL = "wss://livekit-test.colabmix.jp/livekit_server";
 
-            room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
-                console.log('TrackUnsubscribed', track, publication, participant);
-                if (track.kind === 'video') {
-                    const attachedElements = track.detach();
-                    attachedElements.forEach(element => {
-                        element.remove();
-                        console.log('Video element removed', element);
-                    });
-                }
+            // LiveKit に接続
+            const room = await connect(wsURL, token, {
+                // Video track settings
+                videoCaptureDefaults: {
+                    resolution: { width: 1280, height: 720 }
+                },
+                adaptiveStream: true,
+                dynacast: true
             });
 
             console.log('ルームへの接続に成功しました。');
+
+            // ローカルビデオトラックの生成
+            const localVideoTrack = await createLocalVideoTrack();
+            const videoElement = localVideoTrack.attach();
+            videoElement.autoplay = true;
+            videoElement.playsInline = true;
+            videoElement.muted = true;
+
+            // ビデオコンテナにビデオエレメントを追加
+            document.getElementById('my-video-container').appendChild(videoElement);
+
+            // 他の参加者のビデオトラックを購読
+            room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                console.log(`Track subscribed: ${track.kind}, isEnabled: ${track.isEnabled}, isSubscribed: ${publication.isSubscribed}`);
+                if (track.kind === 'video') {
+                    const videoElement = track.attach();
+                    document.getElementById('remote-video-container').appendChild(videoElement);
+                }
+            });
         } catch (error) {
             console.error('接続エラー:', error);
         }

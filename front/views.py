@@ -17,25 +17,18 @@ class TestView(View):
 
 
 class JoinView(View):
-    def get(self, request, *args, **kwargs):
-        authorized_user = login_check(request)
-        now = datetime.now()
-        ## 表示画像の取得
-        web_top_image = get_web_image(now, "top")
-
-        ## セッションにエラーメッセージがあるときは表示
-        error_message = None
-        if "error_msg" in request.session and request.session['error_msg']:
-            error_message = request.session['error_msg']
-            ## セッションのエラーメッセージを空にして保存
-            request.session['error_msg'] = None
-        success_message = None
-        if "success_msg" in request.session and request.session['success_msg']:
-            success_message = request.session['success_msg']
-            ## セッションのサクセスメッセージを空にして保存
-            request.session['success_msg'] = None
-
-        return render(request, "front/top.html", {"authorized_user": authorized_user, "error_message": error_message, "success_message": success_message, "web_top_image": web_top_image})
+    async def get(self, request, *args, **kwargs):
+        api_key = 'APILubZWopUFTo8'
+        api_secret = 'njsBhDaEJZ866ye1Vc6eKuzdk2fBpvd1M5V5XajFcZHB'
+        livekit_api_url = 'https://livekit-test.colabmix.jp/livekit_server'
+        
+        ## LiveKitAPI クライアントを作成
+        lkapi = api.LiveKitAPI(livekit_api_url, api_key, api_secret)
+        ## ルーム一覧を取得
+        rooms_response = await lkapi.room.list_rooms(api.ListRoomsRequest())
+        room_names = [room.name for room in rooms_response.rooms]
+        logger.debug(room_names)
+        return render(request, "room_list.html", {"room_names": room_names})
 
 
 
@@ -44,10 +37,9 @@ class LiveStartView(View):
         ## LiveKit API サーバー情報
         # api_key = 'devkey'
         # api_secret = 'secret'
-        api_key = 'APITJa4apR9h99w'
-        api_secret = 'Aln2Ix3BazFtqf6EomicLO8y0jOf2iYVEOukb7MUi9b'
+        api_key = 'APILubZWopUFTo8'
+        api_secret = 'njsBhDaEJZ866ye1Vc6eKuzdk2fBpvd1M5V5XajFcZHB'
         livekit_api_url = 'https://livekit-test.colabmix.jp/livekit_server'
-        # livekit_api_url = 'http://127.0.0.1:7880'
         user_identity = str(uuid.uuid4())
 
         ## ルーム名を指定
@@ -81,10 +73,10 @@ class LiveStartView(View):
             # ttl_minutes = 60
             # exp_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=ttl_minutes)
 
-            # # AccessTokenに期限を設定
+            ## AccessTokenに期限を設定
             # token.set_expiry(exp_time.timestamp())
 
-            # # JWT形式でトークンを生成
+            ## JWT形式でトークンを生成
             # jwt_token = token.to_jwt()
 
             # logger.debug(f'create token: {token}')
@@ -97,3 +89,21 @@ class LiveStartView(View):
             })
         except Exception as e:
             logger.debug(f'Failed create token: {str(e)}')
+
+
+class GetTokenView(View):
+    def get(self, request, *args, **kwargs):
+        room_name = request.GET.get('room')
+        
+        user_identity = str(uuid.uuid4())
+        api_key = 'APILubZWopUFTo8'
+        api_secret = 'njsBhDaEJZ866ye1Vc6eKuzdk2fBpvd1M5V5XajFcZHB'
+        token = api.AccessToken(api_key, api_secret) \
+                .with_identity(user_identity) \
+                .with_name("Python Bot") \
+                .with_grants(api.VideoGrants(
+                    room_join=True,
+                    room=room_name,
+                )).to_jwt()
+
+        return JsonResponse({'token': token})

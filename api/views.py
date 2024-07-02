@@ -7,6 +7,7 @@ import os
 import asyncio
 from asgiref.sync import async_to_sync
 
+import uuid
 import logging
 logger = logging.getLogger('api')
 
@@ -26,11 +27,13 @@ class RoomListView(views.APIView):
             loop.close()
 
     async def list_rooms(self):
-        lkapi = api.LiveKitAPI(
-            'https://livekit-test.colabmix.jp:7880',
-            api_key="devkey",
-            api_secret="secret"
-        )
+        api_key = 'APILubZWopUFTo8'
+        api_secret = 'njsBhDaEJZ866ye1Vc6eKuzdk2fBpvd1M5V5XajFcZHB'
+        livekit_api_url = 'https://livekit-test.colabmix.jp/livekit_server'
+        
+        ## LiveKitAPI クライアントを作成
+        lkapi = api.LiveKitAPI(livekit_api_url, api_key, api_secret)
+        ## ルーム一覧を取得
         rooms = await lkapi.room.list_rooms(api.ListRoomsRequest())
         room_names = [room.name for room in rooms.rooms]
         return room_names
@@ -41,15 +44,18 @@ class TokenCreateView(views.APIView):
 
     def post(self, request, *args, **kwargs):
         room_name = request.data.get('room_name', 'テスト')
-        user_identity = request.data.get('user_identity', 'ID')
         
-        token = api.AccessToken(api_key="devkey", api_secret="secret") \
-            .with_identity(user_identity) \
-            .with_name("Python Bot") \
-            .with_grants(api.VideoGrants(
-                room_join=True,
-                room=room_name,
-            )).to_jwt()
+        api_key = 'APILubZWopUFTo8'
+        api_secret = 'njsBhDaEJZ866ye1Vc6eKuzdk2fBpvd1M5V5XajFcZHB'
+        user_identity = str(uuid.uuid4())
+        
+        token = api.AccessToken(api_key, api_secret) \
+                .with_identity(user_identity) \
+                .with_name("Python Bot") \
+                .with_grants(api.VideoGrants(
+                    room_join=True,
+                    room=room_name,
+                )).to_jwt()
         
         return Response({'token': token}, status=status.HTTP_200_OK)
     
@@ -60,22 +66,23 @@ class RoomCreateView(views.APIView):
 
     def post(self, request, *args, **kwargs):
         room_name = request.data.get('room_name', 'default-room')
-        room_info = async_to_sync(self.create_room)(room_name)
-        if room_info:
-            room_url = f"https://livekit-test.colabmix.jp:7880/rooms/{room_info.name}"
-            return Response({'room_name': room_info.name, 'room_url': room_url}, status=status.HTTP_200_OK)
+        room = async_to_sync(self.create_room)(room_name)
+        if room:
+            return Response({'room_name': room.name}, status=status.HTTP_200_OK)
         else:
             return Response({'error': 'Failed to create room'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     async def create_room(self, room_name):
         try:
-            lkapi = api.LiveKitAPI(
-                'https://livekit-test.colabmix.jp:7880',
-                api_key="devkey",
-                api_secret="secret"
-            )
-            room_info = await lkapi.room.create_room(api.CreateRoomRequest(name=room_name))
-            return room_info
+            api_key = 'APILubZWopUFTo8'
+            api_secret = 'njsBhDaEJZ866ye1Vc6eKuzdk2fBpvd1M5V5XajFcZHB'
+            livekit_api_url = 'https://livekit-test.colabmix.jp/livekit_server'
+            
+            ## LiveKitAPI クライアントを作成
+            lkapi = api.LiveKitAPI(livekit_api_url, api_key, api_secret)
+            ## ルームの作成
+            room = await lkapi.room.create_room(api.CreateRoomRequest(name=room_name))
+            return room
         except Exception as e:
             logger.debug(f'Error creating room: {str(e)}')
             return None
