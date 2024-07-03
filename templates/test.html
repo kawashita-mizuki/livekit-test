@@ -13,14 +13,6 @@
 </body>
 
 <script type="module">
-    // navigator.mediaDevices.getUserMedia({ video: true })
-    // .then(stream => {
-    //     document.getElementById('video').srcObject = stream;
-    // })
-    // .catch(error => {
-    //     console.error('Error accessing media devices.', error);
-    // });
-
     import { connect, Room, RoomEvent, createLocalVideoTrack, createLocalAudioTrack } from 'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.esm.js';
     document.getElementById('liveStart').addEventListener('click', async () => {
         try {
@@ -43,8 +35,6 @@
                 dynacast: true
             });
 
-            console.log('ルームへの接続に成功しました。');
-
             // ローカルビデオトラックの生成
             const localVideoTrack = await createLocalVideoTrack();
             const videoElement = localVideoTrack.attach();
@@ -54,6 +44,8 @@
 
             // ビデオコンテナにビデオエレメントを追加
             document.getElementById('my-video-container').appendChild(videoElement);
+
+            await room.localParticipant.publishTrack(localVideoTrack);
 
             // 他の参加者のビデオトラックを購読
             room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {

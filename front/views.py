@@ -27,7 +27,6 @@ class JoinView(View):
         ## ルーム一覧を取得
         rooms_response = await lkapi.room.list_rooms(api.ListRoomsRequest())
         room_names = [room.name for room in rooms_response.rooms]
-        logger.debug(room_names)
         return render(request, "room_list.html", {"room_names": room_names})
 
 

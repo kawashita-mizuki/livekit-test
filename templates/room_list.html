@@ -17,20 +17,19 @@
     <div id="remote-video-container"></div>
 
     <script type="module">
-        import { connect, createLocalVideoTrack, Room, RoomEvent, ParticipantEvent, RemoteTrackPublication, RemoteParticipant, VideoPresets } from 'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.esm.js';
+        import { connect, createLocalVideoTrack, RoomEvent } from 'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.esm.js';
 
         // ルームに参加するための関数
         window.joinRoom = async function(roomName) {
-            // トークン取得
+            // トークン取得APIのエンドポイント（適宜設定してください）
             const tokenEndpoint = `/api/token?room=${roomName}`;
             const response = await fetch(tokenEndpoint);
             const data = await response.json();
 
             if (data.token) {
                 const room = await connect('wss://livekit-test.colabmix.jp/livekit_server', data.token);
-                console.log('接続成功:', roomName);
 
-                // 自分のビデオトラックを生成して公開
+                // 自分のビデオトラックを生成し、パブリッシュ
                 const localVideoTrack = await createLocalVideoTrack();
                 const videoElement = localVideoTrack.attach();
                 videoElement.autoplay = true;
@@ -38,71 +37,31 @@
                 document.getElementById('my-video-container').appendChild(videoElement);
 
                 await room.localParticipant.publishTrack(localVideoTrack);
-                console.log('ビデオトラックがパブリッシュ');
 
-                // イベントリスナーの設定
-                room
-                    .on(RoomEvent.TrackSubscribed, handleTrackSubscribed)
-                    .on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
-                    .on(RoomEvent.ParticipantConnected, handleParticipantConnected)
-                    .on(RoomEvent.Disconnected, handleDisconnect);
-
-                // 既存の参加者のトラックを確認
+                // 他の参加者の既存トラックを表示
                 room.participants.forEach(participant => {
-                    console.log(`既存の参加者: ${participant.identity}`);
                     participant.tracks.forEach(publication => {
-                        if (publication.isSubscribed && publication.track.kind === 'video') {
+                        if (publication.track && publication.track.kind === 'video') {
                             const remoteVideoElement = publication.track.attach();
                             remoteVideoElement.autoplay = true;
                             remoteVideoElement.playsInline = true;
                             document.getElementById('remote-video-container').appendChild(remoteVideoElement);
-                            console.log(`既存の参加者のビデオトラックが表示されました: ${participant.identity}`);
-                        } else {
-                            publication.on(ParticipantEvent.TrackSubscribed, handleTrackSubscribed);
                         }
                     });
+                });
+
+                // 他の参加者のビデオトラックをサブスクライブ
+                room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    if (track.kind === 'video') {
+                        const videoElement = track.attach();
+                        videoElement.autoplay = true;
+                        videoElement.playsInline = true;
+                        document.getElementById('remote-video-container').appendChild(videoElement);
+                    }
                 });
             } else {
                 console.error('トークンの取得に失敗しました');
             }
-        }
-
-        function handleTrackSubscribed(track, publication, participant) {
-            console.log(`TrackSubscribedイベント: kind=${track.kind}, participant=${participant.identity}`);
-            if (track.kind === 'video') {
-                const videoElement = track.attach();
-                videoElement.autoplay = true;
-                videoElement.playsInline = true;
-                document.getElementById('remote-video-container').appendChild(videoElement);
-                console.log(`他の参加者のビデオトラックがサブスクライブされました: ${participant.identity}`);
-            }
-        }
-
-        function handleTrackUnsubscribed(track, publication, participant) {
-            console.log(`TrackUnsubscribedイベント: kind=${track.kind}, participant=${participant.identity}`);
-            if (track.kind === 'video') {
-                const elements = track.detach();
-                elements.forEach(element => element.remove());
-                console.log(`他の参加者のビデオトラックが取り消されました: ${participant.identity}`);
-            }
-        }
-
-        function handleParticipantConnected(participant) {
-            console.log(`ParticipantConnectedイベント: participant=${participant.identity}`);
-            participant.tracks.forEach(publication => {
-                if (publication.track && publication.track.kind === 'video' && publication.isSubscribed) {
-                    const remoteVideoElement = publication.track.attach();
-                    remoteVideoElement.autoplay = true;
-                    remoteVideoElement.playsInline = true;
-                    document.getElementById('remote-video-container').appendChild(remoteVideoElement);
-                    console.log(`新しい参加者のビデオトラックが表示されました: ${participant.identity}`);
-                }
-                publication.on(ParticipantEvent.TrackSubscribed, handleTrackSubscribed);
-            });
-        }
-
-        function handleDisconnect() {
-            console.log('disconnected from room');
         }
 
     </script>
