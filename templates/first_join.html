@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <title>LiveKit Demo</title>
+    <link href="/static/front/css/styles.css" rel="stylesheet">
+</head>
+<body>
+    <button id="liveStart">ライブを始める</button>
+    <div id="video-container">
+        <div id="my-video-container" class="video-box">
+            <div class="label">自分</div>
+        </div>
+        <div id="remote-video-container" class="video-box">
+            <div class="label">相手</div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button id="toggle-mic">ミュート</button>
+        <button id="toggle-camera">カメラオフ</button>
+        <select id="video-devices">
+            <option value="">カメラ切り替え</option>
+        </select>
+        <select id="audio-devices">
+            <option value="">マイク切り替え</option>
+        </select>
+        <button id="leave-room">退室</button>
+    </div>
+</body>
+
+<script type="module">
+    import { connect, Room, RoomEvent, createLocalVideoTrack, createLocalAudioTrack } from 'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.esm.js';
+
+    let localVideoTrack, localAudioTrack;
+    let room;
+    let isCameraOn = true;
+    let isMicOn = true;
+
+    document.getElementById('liveStart').addEventListener('click', async () => {
+        try {
+            const userIdentity = "先に入室した人";
+            const response = await fetch(`/live/start?user_identity=${encodeURIComponent(userIdentity)}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            const token = data.token;
+
+            const wsURL = "wss://livekit-test.colabmix.jp/livekit_server";
+
+            // LiveKit に接続
+            room = await connect(wsURL, token, {
+                videoCaptureDefaults: {
+                    resolution: { width: 1280, height: 720 }
+                },
+                adaptiveStream: true,
+                dynacast: true
+            });
+
+            // ローカルビデオトラックの生成
+            localVideoTrack = await createLocalVideoTrack();
+            localAudioTrack = await createLocalAudioTrack();
+
+            const videoElement = localVideoTrack.attach();
+            videoElement.autoplay = true;
+            videoElement.playsInline = true;
+            videoElement.muted = true;
+
+            // ビデオコンテナにビデオエレメントを追加
+            document.getElementById('my-video-container').appendChild(videoElement);
+
+            await room.localParticipant.publishTrack(localVideoTrack);
+            await room.localParticipant.publishTrack(localAudioTrack);
+
+            // 他の参加者のビデオトラックを購読
+            room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                if (track.kind === 'video') {
+                    const videoElement = track.attach();
+                    document.getElementById('remote-video-container').appendChild(videoElement);
+                } else if (track.kind === 'audio') {
+                    const audioElement = track.attach();
+                    document.getElementById('remote-video-container').appendChild(audioElement);
+                }
+            });
+
+            // 他の参加者のトラックがアンパブリッシュされた場合の処理
+            room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+                if (track.kind === 'video') {
+                    const elements = track.detach();
+                    elements.forEach(element => element.remove());
+                } else if (track.kind === 'audio') {
+                    const elements = track.detach();
+                    elements.forEach(element => element.remove());
+                }
+            });
+
+            // デバイスリストの更新
+            await populateDeviceLists();
+        } catch (error) {
+            console.error('接続エラー:', error);
+        }
+    });
+
+    // デバイスリスト
+    async function populateDeviceLists() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        const audioDevices = devices.filter(device => device.kind === 'audioinput');
+        
+        const videoSelect = document.getElementById('video-devices');
+        const audioSelect = document.getElementById('audio-devices');
+
+        videoSelect.innerHTML = '<option value="">カメラ切り替え</option>';
+        audioSelect.innerHTML = '<option value="">マイク切り替え</option>';
+
+        videoDevices.forEach(device => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.text = device.label || `Camera ${videoSelect.length + 1}`;
+            videoSelect.appendChild(option);
+        });
+
+        audioDevices.forEach(device => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.text = device.label || `Microphone ${audioSelect.length + 1}`;
+            audioSelect.appendChild(option);
+        });
+    }
+
+    document.getElementById('toggle-mic').addEventListener('click', async () => {
+        isMicOn = !isMicOn;
+        localAudioTrack.mediaStreamTrack.enabled = isMicOn;
+        document.getElementById('toggle-mic').innerText = isMicOn ? 'ミュート' : 'ミュート解除';
+    });
+
+    document.getElementById('toggle-camera').addEventListener('click', async () => {
+        isCameraOn = !isCameraOn;
+        localVideoTrack.mediaStreamTrack.enabled = isCameraOn;
+        document.getElementById('toggle-camera').innerText = isCameraOn ? 'カメラオフ' : 'カメラオン';
+    });
+
+    document.getElementById('leave-room').addEventListener('click', () => {
+        if (room) {
+            room.disconnect();
+            document.getElementById('my-video-container').innerHTML = '';
+            document.getElementById('remote-video-container').innerHTML = '';
+        }
+    });
+
+    // カメラ切り替え
+    document.getElementById('video-devices').addEventListener('change', async () => {
+        const deviceId = document.getElementById('video-devices').value;
+        if (deviceId) {
+            // 古いトラックをアンパブリッシュして停止
+            await room.localParticipant.unpublishTrack(localVideoTrack);
+            localVideoTrack.stop();
+            localVideoTrack.detach().forEach(element => element.remove());
+
+            // 新しいトラックを作成してパブリッシュ
+            localVideoTrack = await createLocalVideoTrack({ deviceId });
+            const videoElement = localVideoTrack.attach();
+            videoElement.autoplay = true;
+            videoElement.playsInline = true;
+            document.getElementById('my-video-container').innerHTML = '';
+            document.getElementById('my-video-container').appendChild(videoElement);
+            await room.localParticipant.publishTrack(localVideoTrack);
+        }
+    });
+
+    // マイク切り替え
+    document.getElementById('audio-devices').addEventListener('change', async () => {
+        const deviceId = document.getElementById('audio-devices').value;
+        if (deviceId) {
+            // 古いトラックをアンパブリッシュして停止
+            await room.localParticipant.unpublishTrack(localAudioTrack);
+            localAudioTrack.stop();
+
+            // 新しいトラックを作成してパブリッシュ
+            localAudioTrack = await createLocalAudioTrack({ deviceId });
+            await room.localParticipant.publishTrack(localAudioTrack);
+        }
+    });
+</script>
+</html>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <title>LiveKit Demo</title>
+    <link href="/static/front/css/styles.css" rel="stylesheet">
+</head>
+<body>
+    <h3>スタッフ用Room一覧</h3>
+    <ul id="room-list">
+        {% for room in rooms %}
+        <li><a href="#" onclick="getParticipants('{{ room.name }}')">{{ room.name }}</a></li>
+        {% endfor %}
+    </ul>
+
+    <div id="participant-info"></div>
+
+    <script type="module">
+
+        // Roomの詳細情報を取得
+        async function getParticipants(roomName) {
+            try {
+                const response = await fetch(`/api/get_room_participants?room_name=${roomName}`);
+                const data = await response.json();
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                const participants = data.participants;
+
+                let participantHTML = `<h3>Participants in ${roomName}</h3><ul>`;
+                participants.forEach(participant => {
+                    let audioButtonLabel = participant.is_audio_enabled ? 'ミュート' : 'ミュート解除';
+                    let videoButtonLabel = participant.is_video_enabled ? 'カメラオフ' : 'カメラオン';
+                    
+                    participantHTML += `
+                        <li>
+                            ID: ${participant.identity} 
+                            <button onclick="removeParticipant('${roomName}', '${participant.identity}')">強制退室</button>
+                            <button onclick="toggleTrack('${roomName}', '${participant.identity}', 'audio', ${participant.is_audio_enabled})">${audioButtonLabel}</button>
+                            <button onclick="toggleTrack('${roomName}', '${participant.identity}', 'video', ${participant.is_video_enabled})">${videoButtonLabel}</button>
+                        </li>
+                    `;
+                });
+                participantHTML += '</ul>';
+
+                document.getElementById('participant-info').innerHTML = participantHTML;
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // 強制退室
+        async function removeParticipant(roomName, participantSid) {
+            try {
+                const response = await fetch('/api/remove_participant/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ room_name: roomName, participant_sid: participantSid })
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    console.error('Error:', data.error);
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                alert('強制退室させました');
+                getParticipants(roomName);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // カメラオフ、ミュート
+        async function toggleTrack(roomName, participantSid, trackKind, isEnabled) {
+            try {
+                const response = await fetch('/api/toggle_track/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ room_name: roomName, participant_sid: participantSid, track_kind: trackKind, enable: !isEnabled })
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    console.error('Error:', data.error);
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                alert(`${trackKind} トラックは現在 ${data.new_state ? '有効' : '無効'} です`);
+                getParticipants(roomName);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+
+        window.getParticipants = getParticipants;
+        window.removeParticipant = removeParticipant;
+        window.toggleTrack = toggleTrack;
+    </script>
+</body>
+</html>
