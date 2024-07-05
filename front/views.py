@@ -41,7 +41,9 @@ class LiveStartView(View):
             logger.debug(f'Failed to lkapi: {str(e)}')
             
         try:
-            room = await lkapi.room.create_room(api.CreateRoomRequest(name=room_name))
+            ## room毎に最大参加可能人数を指定することができる
+            ## room作成時か、livekite.yamlファイルで指定してあげる
+            room = await lkapi.room.create_room(api.CreateRoomRequest(name=room_name, max_participants=2))
         except Exception as e:
             logger.debug(f'Failed create room: {str(e)}')
 
@@ -82,12 +84,22 @@ class SecondJoinView(View):
 
 ## トークンの取得
 class GetTokenView(View):
-    def get(self, request, *args, **kwargs):
+    async def get(self, request, *args, **kwargs):
         room_name = request.GET.get('room')
         user_identity = request.GET.get('user_identity', str(uuid.uuid4()))
         
         api_key = 'APILubZWopUFTo8'
         api_secret = 'njsBhDaEJZ866ye1Vc6eKuzdk2fBpvd1M5V5XajFcZHB'
+        livekit_api_url = 'https://livekit-test.colabmix.jp/livekit_server'
+        lkapi = api.LiveKitAPI(livekit_api_url, api_key, api_secret)
+        
+        ## ルーム情報を取得
+        rooms_response = await lkapi.room.list_rooms(api.ListRoomsRequest())
+        room_info = next((room for room in rooms_response.rooms if room.name == room_name), None)
+        ## 参加可能かどうかをチェック
+        if room_info and room_info.num_participants >= room_info.max_participants:
+            return JsonResponse({'message': 'ルームに参加できる人数を超えています。'})
+        
         token = api.AccessToken(api_key, api_secret) \
                 .with_identity(user_identity) \
                 .with_name("Python Bot") \

@@ -44,11 +44,14 @@
         // ルームに参加するための関数
         window.joinRoom = async function(roomName) {
             const userIdentity = "後から入室した人";
-            const tokenEndpoint = `/api/token?room=${roomName}&user_identity=${userIdentity}`;
+            const tokenEndpoint = `/api/token?room=${roomName}`;
             const response = await fetch(tokenEndpoint);
             const data = await response.json();
 
-            if (data.token) {
+            if (data.message) {
+                alert(data.message);
+                return;
+            } else if (data.token) {
                 room = await connect('wss://livekit-test.colabmix.jp/livekit_server', data.token);
 
                 localVideoTrack = await createLocalVideoTrack();

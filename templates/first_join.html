@@ -39,7 +39,7 @@
     document.getElementById('liveStart').addEventListener('click', async () => {
         try {
             const userIdentity = "先に入室した人";
-            const response = await fetch(`/live/start?user_identity=${encodeURIComponent(userIdentity)}`);
+            const response = await fetch(`/live/start`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
